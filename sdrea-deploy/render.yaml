@@ -1,0 +1,37 @@
+## Blueprint Render — deploy gratuito dei due motori SDREA (idraulico e sismico).
+##
+## Come si usa (nessuna riga di comando richiesta):
+## 1. Crea un account gratuito su https://render.com (login con GitHub, non serve carta di credito).
+## 2. Metti questa cartella (sdrea-deploy/) in un repository GitHub (vedi il README nella cartella padre per i passaggi).
+## 3. In Render: "New +" -> "Blueprint" -> scegli il repository -> Render legge questo file
+##    e propone di creare entrambi i servizi in automatico -> "Apply".
+## 4. Al termine del deploy annota i due URL pubblici (es. https://sdrea-motore-idraulico.onrender.com)
+##    e comunicali per completare il collegamento con l'interfaccia SDREA.html.
+##
+## Nota onesta: il piano gratuito di Render mette il servizio "in pausa" dopo 15 minuti
+## senza richieste, e la prima richiesta successiva impiega circa un minuto per risvegliarlo.
+## Prima di un colloquio o una demo, apri semplicemente una volta l'URL /healthz di ciascun
+## servizio qualche minuto prima, per "svegliarli" in anticipo.
+
+services:
+  - type: web
+    name: sdrea-motore-idraulico
+    runtime: docker
+    plan: free
+    rootDir: motore-idraulico
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+
+  - type: web
+    name: sdrea-motore-sismico
+    runtime: docker
+    plan: free
+    rootDir: motore-sismico
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
