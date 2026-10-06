@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ponti, Daghi e Edifici a Rischio</title>
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#111111">
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; color: #1a1a1a; }
+  h1 { font-size: 1.4rem; }
+  .card { border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  input, select, textarea, button { padding: 8px; margin: 4px 0; font-size: 0.95rem; font-family: inherit; }
+  input, select, textarea { width: 100%; box-sizing: border-box; }
+  button { cursor: pointer; background: #111; color: white; border: none; border-radius: 6px; padding: 10px 16px; }
+  button.secondary { background: #666; }
+  .badge { font-size: 0.8rem; padding: 3px 10px; border-radius: 12px; color: white; display: inline-block; font-weight: 600; }
+  .badge-verde { background: #2e7d32; }
+  .badge-giallo { background: #f9a825; color: #1a1a1a; }
+  .badge-rosso { background: #c62828; }
+  .badge-outline { background: transparent; border: 1px solid #999; color: #555; font-weight: 500; }
+  .struct-row { display: flex; justify-content: space-between; align-items: center; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .small { font-size: 0.85rem; color: #666; }
+  details { margin-top: 10px; }
+  summary { cursor: pointer; font-size: 0.85rem; color: #333; font-weight: 600; }
+  .checkrow { display: flex; align-items: center; gap: 8px; }
+  .checkrow input { width: auto; }
+  fieldset { border: 1px solid #eee; border-radius: 6px; padding: 10px; margin-top: 8px; }
+  legend { font-size: 0.8rem; color: #666; padding: 0 6px; }
+  .tag-chip { display: inline-block; font-size: 0.72rem; padding: 2px 7px; border-radius: 10px; background: #eee; color: #444; margin: 2px 4px 2px 0; }
+  .tag-chip.warn { background: #fde7e7; color: #a01818; }
+  .offline-banner { border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 0.85rem; display: none; align-items: center; justify-content: space-between; gap: 10px; }
+  .offline-banner.show { display: flex; }
+  .offline-banner.state-offline { background: #fdecec; color: #8a1f1f; border: 1px solid #f3b8b8; }
+  .offline-banner.state-pending { background: #fff6e0; color: #7a5b00; border: 1px solid #f0d989; }
+  .offline-banner.state-conflict { background: #fde7e7; color: #a01818; border: 1px solid #f0a8a8; }
+  .offline-banner button { padding: 5px 10px; font-size: 0.8rem; }
+  .pending-badge { display: inline-block; font-size: 0.7rem; padding: 2px 8px; border-radius: 10px; background: #fff6e0; color: #7a5b00; border: 1px solid #f0d989; margin-left: 6px; }
+  .conflict-diff { border: 1px solid #f0a8a8; border-radius: 6px; padding: 10px; margin: 8px 0; font-size: 0.85rem; }
+  .conflict-diff table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  .conflict-diff td { padding: 3px 6px; border-bottom: 1px solid #eee; }
+</style>
+</head>
+<body>
+  <h1>🌉 Ponti, Daghi e Edifici a Rischio</h1>
+  <p class="small">Gestione ispezioni e stato di readiness. Il colore riflette una regola trasparente (tempo dall'ultima ispezione + gravità dichiarata dall'ispettore) — non un giudizio automatico di sicurezza strutturale. I campi di Vulnerabilità (ridondanza, normativa antisismica) vanno compilati da un tecnico qualificato: il sistema non li deduce mai automaticamente.</p>
+
+  <div id="offline-banner" class="offline-banner">
+    <span id="offline-banner-text"></span>
+    <button id="offline-banner-action" style="display:none;" onclick="openConflictsView()">Vedi conflitti</button>
+  </div>
+
+  <div class="card" id="auth-card">
+    <div id="auth-logged-out">
+      <h3>Accedi come ispettore</h3>
+      <p class="small">A.5 — Le ispezioni sono firmate dall'utente autenticato, non da un nome scritto liberamente: accedi (o registrati la prima volta) prima di registrare un'ispezione.</p>
+      <div class="grid2">
+        <input id="auth_email" placeholder="Email" type="email">
+        <input id="auth_password" placeholder="Password" type="password">
+      </div>
+      <input id="auth_nome" placeholder="Nome e cognome (solo per la prima registrazione)" style="margin-top:4px;">
+      <div style="display:flex; gap:8px; margin-top:6px;">
+        <button onclick="doLogin()">Accedi</button>
+        <button class="secondary" onclick="doRegister()">Registrati</button>
+      </div>
+      <p class="small" id="auth-error" style="color:#a01818;"></p>
+    </div>
+    <div id="auth-logged-in" style="display:none; align-items:center; justify-content:space-between;">
+      <span class="small">Connesso come <strong id="auth-nome-display"></strong></span>
+      <button class="secondary" onclick="doLogout()">Esci</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Nuova struttura</h3>
+    <div class="grid2">
+      <input id="s_name" placeholder="Nome (es. Ponte sul Po - Ferrara)">
+      <select id="s_tipo" onchange="toggleEdificioFields()">
+        <option value="ponte">Ponte</option>
+        <option value="diga">Diga</option>
+        <option value="edificio">Edificio</option>
+      </select>
+      <input id="s_comune" placeholder="Comune">
+      <input id="s_anno" placeholder="Anno costruzione" type="number">
+      <input id="s_lat" placeholder="Latitudine" type="number" step="any">
+      <input id="s_lon" placeholder="Longitudine" type="number" step="any">
+    </div>
+    <div id="edificio-fields" class="grid2" style="display:none;">
+      <input id="s_piani" placeholder="Numero piani" type="number">
+      <select id="s_destinazione">
+        <option value="">Destinazione d'uso...</option>
+        <option value="scuola">Scuola</option>
+        <option value="ospedale">Ospedale</option>
+        <option value="residenziale">Residenziale</option>
+        <option value="altro">Altro</option>
+      </select>
+    </div>
+
+    <fieldset>
+      <legend>Vulnerabilità (A.2) — da compilare da un tecnico qualificato</legend>
+      <div class="grid3">
+        <select id="s_tipologia">
+          <option value="">Tipologia strutturale...</option>
+          <option value="trave">Trave</option>
+          <option value="arco">Arco</option>
+          <option value="strallato">Strallato</option>
+          <option value="sospeso">Sospeso</option>
+          <option value="a_cassone">A cassone</option>
+          <option value="altro">Altro</option>
+        </select>
+        <select id="s_ridondanza">
+          <option value="da_verificare">Ridondanza: da verificare</option>
+          <option value="ridondante">Ridondanza: ridondante</option>
+          <option value="non_ridondante">Ridondanza: NON ridondante</option>
+        </select>
+        <select id="s_zona_sismica">
+          <option value="">Zona sismica...</option>
+          <option value="1">Zona 1</option>
+          <option value="2">Zona 2</option>
+          <option value="3">Zona 3</option>
+          <option value="4">Zona 4</option>
+        </select>
+      </div>
+      <div class="grid2">
+        <div class="checkrow"><input id="s_normativa" type="checkbox"><label for="s_normativa" class="small">Progettato secondo normativa antisismica vigente all'epoca</label></div>
+        <div>
+          <label class="small">Ultima verifica tecnica formale</label>
+          <input id="s_ultima_verifica" type="date">
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Esposizione (A.3)</legend>
+      <div class="grid2">
+        <input id="s_traffico" placeholder="Traffico giornaliero stimato" type="number">
+        <input id="s_edifici_sensibili" placeholder="Edifici sensibili vicini (scuole, ospedali)" type="number">
+        <input id="s_popolazione" placeholder="Popolazione servita stimata (opzionale)" type="number">
+        <div class="checkrow"><input id="s_percorsi_alt" type="checkbox"><label for="s_percorsi_alt" class="small">Percorsi alternativi disponibili</label></div>
+      </div>
+    </fieldset>
+
+    <button onclick="createStructure()">Aggiungi struttura</button>
+  </div>
+
+  <div id="structures"></div>
+
+  <div id="inspection-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:100;">
+    <div class="card" style="background:white; max-width:420px; width:90%;">
+      <h3>Nuova ispezione</h3>
+      <p class="small">Registrata come <strong id="insp-ispettore-display"></strong> — l'identità viene dall'account con cui hai eseguito l'accesso, non è modificabile qui (A.5: tracciabilità).</p>
+      <form id="insp-form" onsubmit="event.preventDefault(); submitInspection();">
+        <label class="small">Gravità rilevata</label>
+        <select id="insp-gravita">
+          <option value="bassa">Bassa</option>
+          <option value="media">Media</option>
+          <option value="alta">Alta</option>
+        </select>
+        <label class="small">Note</label>
+        <textarea id="insp-note" rows="3"></textarea>
+        <label class="small">Foto (apre la fotocamera su smartphone)</label>
+        <input id="insp-foto" type="file" accept="image/*" capture="environment">
+        <div style="display:flex; gap:8px; margin-top:10px;">
+          <button type="submit">Salva ispezione</button>
+          <button type="button" class="secondary" onclick="closeInspectionForm()">Annulla</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="egms-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:100;">
+    <div class="card" style="background:white; max-width:520px; width:92%; max-height:85vh; overflow-y:auto;">
+      <h3>Importa dati EGMS (A.7)</h3>
+      <p class="small">
+        Incolla qui l'esportazione CSV dell'<strong>EGMS Explorer</strong> (Copernicus) per questa struttura,
+        con due colonne <code>data,spostamento_cumulato_mm</code> (una riga per misurazione, intestazione facoltativa).
+        Servono almeno 3 punti per calcolare un trend.
+      </p>
+      <textarea id="egms-csv" rows="8" placeholder="2022-01-01,2.0&#10;2023-01-01,3.0&#10;2024-01-01,15.0"></textarea>
+      <p class="small" id="egms-error" style="color:#a01818;"></p>
+      <div style="display:flex; gap:8px; margin-top:10px;">
+        <button onclick="submitEgmsImport()">Importa</button>
+        <button type="button" class="secondary" onclick="closeEgmsForm()">Annulla</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="edit-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:100;">
+    <div class="card" style="background:white; max-width:460px; width:92%; max-height:85vh; overflow-y:auto;">
+      <h3>Aggiorna dati tecnici</h3>
+      <p class="small">Vulnerabilità ed Esposizione — compila solo ciò che sai per certo. Lascia il resto invariato.</p>
+      <fieldset>
+        <legend>Vulnerabilità</legend>
+        <select id="e_tipologia">
+          <option value="">Tipologia strutturale (invariata)</option>
+          <option value="trave">Trave</option>
+          <option value="arco">Arco</option>
+          <option value="strallato">Strallato</option>
+          <option value="sospeso">Sospeso</option>
+          <option value="a_cassone">A cassone</option>
+          <option value="altro">Altro</option>
+        </select>
+        <select id="e_ridondanza">
+          <option value="">Ridondanza (invariata)</option>
+          <option value="da_verificare">Da verificare</option>
+          <option value="ridondante">Ridondante</option>
+          <option value="non_ridondante">NON ridondante</option>
+        </select>
+        <select id="e_zona_sismica">
+          <option value="">Zona sismica (invariata)</option>
+          <option value="1">Zona 1</option>
+          <option value="2">Zona 2</option>
+          <option value="3">Zona 3</option>
+          <option value="4">Zona 4</option>
+        </select>
+        <div class="checkrow"><input id="e_normativa" type="checkbox"><label for="e_normativa" class="small">Normativa antisismica rispettata</label></div>
+        <label class="small">Ultima verifica tecnica</label>
+        <input id="e_ultima_verifica" type="date">
+      </fieldset>
+      <fieldset>
+        <legend>Esposizione</legend>
+        <input id="e_traffico" placeholder="Traffico giornaliero stimato (invariato)" type="number">
+        <input id="e_edifici_sensibili" placeholder="Edifici sensibili vicini (invariato)" type="number">
+        <input id="e_popolazione" placeholder="Popolazione servita (invariato)" type="number">
+        <div class="checkrow"><input id="e_percorsi_alt" type="checkbox"><label for="e_percorsi_alt" class="small">Percorsi alternativi disponibili</label></div>
+      </fieldset>
+      <div style="display:flex; gap:8px; margin-top:10px;">
+        <button onclick="submitEdit()">Salva</button>
+        <button type="button" class="secondary" onclick="closeEditForm()">Annulla</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="conflicts-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:100;">
+    <div class="card" style="background:white; max-width:520px; width:94%; max-height:85vh; overflow-y:auto;">
+      <h3>Modifiche in conflitto</h3>
+      <p class="small">Queste modifiche sono state preparate offline, ma nel frattempo qualcun altro ha aggiornato la stessa struttura. Scegli come procedere per ciascuna — non vengono mai applicate automaticamente.</p>
+      <div id="conflicts-list"></div>
+      <button type="button" class="secondary" onclick="closeConflictsView()">Chiudi</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Endpoint per SDREA</h3>
+    <p class="small">Il motore sismico e il modulo M5 di SDREA leggono lo stato aggiornato da qui:</p>
+    <code>GET /api/sdrea/readiness-feed</code>
+  </div>
+
+<script>
+function toggleEdificioFields() {
+  document.getElementById('edificio-fields').style.display =
+    document.getElementById('s_tipo').value === 'edificio' ? 'grid' : 'none';
+}
+
+/* =========================================================================
+   A.5 — AUTENTICAZIONE ISPETTORI
+   Il token bearer va in localStorage (non IndexedDB: è un solo valore,
+   letto spesso, e deve restare disponibile anche se il browser svuota
+   IndexedDB per pressione di storage — raro, ma i token persi
+   costerebbero un nuovo login sul campo). Vita lunga (30 giorni, vedi
+   app/auth.py) proprio per restare valido durante giorni di lavoro
+   offline: il login stesso richiede rete, ma una volta ottenuto il
+   token le ispezioni si possono firmare e accodare anche offline.
+   ========================================================================= */
+
+const Auth = {
+  get() {
+    try { return JSON.parse(localStorage.getItem('pd_auth') || 'null'); }
+    catch (e) { return null; }
+  },
+  set(auth) { localStorage.setItem('pd_auth', JSON.stringify(auth)); },
+  clear() { localStorage.removeItem('pd_auth'); },
+  isLoggedIn() { return !!this.get()?.token; },
+  authHeader() {
+    const a = this.get();
+    return a?.token ? { 'Authorization': 'Bearer ' + a.token } : {};
+  },
+};
+
+function refreshAuthUI() {
+  const a = Auth.get();
+  const loggedOut = document.getElementById('auth-logged-out');
+  const loggedIn = document.getElementById('auth-logged-in');
+  if (a?.token) {
+    loggedOut.style.display = 'none';
+    loggedIn.style.display = 'flex';
+    document.getElementById('auth-nome-display').textContent = a.nome;
+    document.getElementById('insp-ispettore-display').textContent = a.nome;
+  } else {
+    loggedOut.style.display = 'block';
+    loggedIn.style.display = 'none';
+  }
+}
+
+async function doLogin() {
+  const email = document.getElementById('auth_email').value;
+  const password = document.getElementById('auth_password').value;
+  const errEl = document.getElementById('auth-error');
+  errEl.textContent = '';
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, password })
+    });
+    if (!res.ok) { errEl.textContent = (await res.json()).detail; return; }
+    Auth.set(await res.json());
+    refreshAuthUI();
+  } catch (e) {
+    errEl.textContent = 'Nessuna rete: il login richiede una connessione la prima volta (o quando il token è scaduto).';
+  }
+}
+
+async function doRegister() {
+  const email = document.getElementById('auth_email').value;
+  const password = document.getElementById('auth_password').value;
+  const nome = document.getElementById('auth_nome').value;
+  const errEl = document.getElementById('auth-error');
+  errEl.textContent = '';
+  if (!nome) { errEl.textContent = 'Inserisci nome e cognome per registrarti.'; return; }
+  try {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, password, nome })
+    });
+    if (!res.ok) { errEl.textContent = JSON.stringify((await res.json()).detail); return; }
+    Auth.set(await res.json());
+    refreshAuthUI();
+  } catch (e) {
+    errEl.textContent = 'Nessuna rete: la registrazione richiede una connessione.';
+  }
+}
+
+function doLogout() {
+  Auth.clear();
+  refreshAuthUI();
+}
+
+/* =========================================================================
+   A.6 — FUNZIONAMENTO OFFLINE
+   Un ispettore sul campo dopo un evento reale spesso non ha connessione.
+   Ogni operazione di scrittura (nuova struttura, nuova ispezione,
+   aggiornamento dati tecnici) prova prima la rete; se la rete non
+   risponde (offline reale, o richiesta che va in timeout), l'operazione
+   viene accodata in IndexedDB invece di fallire e perdersi. La coda si
+   svuota da sola quando la connessione torna, e ogni voce ha un
+   client_uuid che rende il reinvio sicuro anche se una risposta
+   precedente è andata persa per una rete instabile (idempotenza lato
+   server — vedi app/main.py).
+
+   Conflitti: se nel frattempo qualcun altro ha modificato la stessa
+   struttura, il server risponde 409 invece di sovrascrivere silenzio-
+   samente — la voce resta in coda con stato "conflict" finché un
+   umano non decide come risolverla (vedi openConflictsView()).
+   ========================================================================= */
+
+const OfflineQueue = (() => {
+  const DB_NAME = 'ponti_daghi_offline';
+  const DB_VERSION = 1;
+  const STORE = 'queue';
+  let dbPromise = null;
+
+  function openDb() {
+    if (dbPromise) return dbPromise;
+    dbPromise = new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(STORE)) {
+          const store = db.createObjectStore(STORE, { keyPath: 'id', autoIncrement: true });
+          store.createIndex('status', 'status');
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return dbPromise;
+  }
+
+  async function add(item) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      const store = tx.objectStore(STORE);
+      item.status = 'pending';
+      item.createdAt = Date.now();
+      item.clientUuid = crypto.randomUUID();
+      const req = store.add(item);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function all() {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readonly');
+      const req = tx.objectStore(STORE).getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function update(id, changes) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      const store = tx.objectStore(STORE);
+      const getReq = store.get(id);
+      getReq.onsuccess = () => {
+        const item = { ...getReq.result, ...changes };
+        const putReq = store.put(item);
+        putReq.onsuccess = () => resolve(item);
+        putReq.onerror = () => reject(putReq.error);
+      };
+      getReq.onerror = () => reject(getReq.error);
+    });
+  }
+
+  async function remove(id) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      const req = tx.objectStore(STORE).delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  return { add, all, update, remove };
+})();
+
+// Mappa id-temporanei (strutture create offline) -> id reale assegnato dal
+// server dopo la sync. Vive solo in memoria: viene ricostruita comunque ad
+// ogni giro di sync leggendo la coda, serve solo a risolvere i riferimenti
+// nello stesso ciclo di sincronizzazione.
+let tempIdMap = {};
+
+function isNetworkError(err) {
+  // fetch() rifiuta con TypeError su assenza di rete/DNS/CORS — a
+  // differenza di un errore HTTP (4xx/5xx), che è una risposta valida
+  // del server e non va mai accodata (accodare una richiesta permanen-
+  // temente invalida non farebbe che ripeterne il fallimento all'infinito).
+  return err instanceof TypeError;
+}
+
+async function tryOrQueue(type, payload, doFetch) {
+  if (!navigator.onLine) {
+    await OfflineQueue.add({ type, payload });
+    updateOfflineBanner();
+    return { queued: true };
+  }
+  try {
+    const res = await doFetch(payload);
+    return { queued: false, res };
+  } catch (err) {
+    if (isNetworkError(err)) {
+      await OfflineQueue.add({ type, payload });
+      updateOfflineBanner();
+      return { queued: true };
+    }
+    throw err;
+  }
+}
+
+async function createStructure() {
+  const tempId = 'tmp-' + crypto.randomUUID();
+  const body = {
+    name: document.getElementById('s_name').value,
+    tipo: document.getElementById('s_tipo').value,
+    comune: document.getElementById('s_comune').value,
+    anno_costruzione: parseInt(document.getElementById('s_anno').value) || null,
+    lat: parseFloat(document.getElementById('s_lat').value) || null,
+    lon: parseFloat(document.getElementById('s_lon').value) || null,
+    numero_piani: parseInt(document.getElementById('s_piani').value) || null,
+    destinazione_uso: document.getElementById('s_destinazione').value || null,
+    tipologia_strutturale: document.getElementById('s_tipologia').value || null,
+    ridondanza: document.getElementById('s_ridondanza').value || null,
+    zona_sismica: parseInt(document.getElementById('s_zona_sismica').value) || null,
+    normativa_antisismica: document.getElementById('s_normativa').checked,
+    ultima_verifica_tecnica: document.getElementById('s_ultima_verifica').value || null,
+    traffico_giornaliero_stimato: parseInt(document.getElementById('s_traffico').value) || null,
+    percorsi_alternativi: document.getElementById('s_percorsi_alt').checked,
+    edifici_sensibili_vicini: parseInt(document.getElementById('s_edifici_sensibili').value) || null,
+    popolazione_servita_stimata: parseInt(document.getElementById('s_popolazione').value) || null,
+  };
+  if (!body.name) { alert('Inserisci un nome'); return; }
+
+  const outcome = await tryOrQueue('create_structure', { body, tempId }, async ({ body }) => {
+    const res = await fetch('/api/structures', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new HttpError(res, await res.json());
+    return res;
+  }).catch(err => { if (err instanceof HttpError) { alert('Errore: ' + JSON.stringify(err.body.detail)); return { error: true }; } throw err; });
+
+  if (outcome.error) return;
+  document.getElementById('s_name').value = '';
+  if (outcome.queued) {
+    alert('Nessuna rete: struttura salvata in locale, verrà inviata al server appena la connessione torna disponibile.');
+  }
+  loadStructures();
+}
+
+class HttpError extends Error { constructor(res, body) { super('HTTP ' + res.status); this.res = res; this.body = body; } }
+
+let activeInspectionStructureId = null;
+
+function openInspectionForm(structureId) {
+  if (!Auth.isLoggedIn()) { alert('Devi accedere come ispettore prima di registrare un\'ispezione (vedi il riquadro "Accedi come ispettore" in alto).'); return; }
+  activeInspectionStructureId = structureId;
+  document.getElementById('inspection-modal').style.display = 'flex';
+}
+
+function closeInspectionForm() {
+  document.getElementById('inspection-modal').style.display = 'none';
+  document.getElementById('insp-form').reset();
+}
+
+async function submitInspection() {
+  if (!Auth.isLoggedIn()) { alert('Devi accedere come ispettore prima di registrare un\'ispezione (vedi il riquadro "Accedi come ispettore" in alto).'); return; }
+
+  const gravita = document.getElementById('insp-gravita').value;
+  const note = document.getElementById('insp-note').value;
+  const fotoInput = document.getElementById('insp-foto');
+  const foto = fotoInput.files[0] || null;
+  // Il token viene "fotografato" ora: se l'ispettore cambia account prima
+  // che la coda offline riesca a sincronizzare questa voce, l'ispezione
+  // resta comunque attribuita a chi l'ha davvero eseguita sul campo.
+  const authToken = Auth.get()?.token;
+
+  const payload = { structureId: activeInspectionStructureId, gravita, note, foto, authToken };
+
+  const outcome = await tryOrQueue('create_inspection', payload, async (p) => {
+    const formData = new FormData();
+    formData.append('gravita', p.gravita);
+    formData.append('note', p.note);
+    if (p.foto) formData.append('foto', p.foto);
+    const res = await fetch(`/api/structures/${p.structureId}/inspections`, {
+      method: 'POST', headers: { 'Authorization': 'Bearer ' + p.authToken }, body: formData,
+    });
+    if (!res.ok) throw new HttpError(res, await res.json());
+    return res;
+  }).catch(err => { if (err instanceof HttpError) { alert('Errore: ' + JSON.stringify(err.body.detail)); return { error: true }; } throw err; });
+
+  if (outcome.error) return;
+  closeInspectionForm();
+  if (outcome.queued) {
+    alert('Nessuna rete: ispezione salvata in locale, verrà inviata al server appena la connessione torna disponibile.');
+  }
+  loadStructures();
+}
+
+/* --------------------------- A.7 — Import EGMS --------------------------- */
+
+let activeEgmsStructureId = null;
+
+function openEgmsForm(structureId) {
+  if (!Auth.isLoggedIn()) { alert('Devi accedere come ispettore prima di importare dati EGMS (per tracciabilità, come per le ispezioni).'); return; }
+  activeEgmsStructureId = structureId;
+  document.getElementById('egms-error').textContent = '';
+  document.getElementById('egms-modal').style.display = 'flex';
+}
+
+function closeEgmsForm() {
+  document.getElementById('egms-modal').style.display = 'none';
+  document.getElementById('egms-csv').value = '';
+  document.getElementById('egms-error').textContent = '';
+}
+
+function parseEgmsCsv(text) {
+  // Righe "data,spostamento_cumulato_mm" — accetta anche un'intestazione,
+  // la riconosce e la salta se la prima colonna non è una data valida.
+  const rows = text.split('\n').map(r => r.trim()).filter(Boolean);
+  const punti = [];
+  for (const row of rows) {
+    const parts = row.split(',').map(p => p.trim());
+    if (parts.length < 2) continue;
+    const [dataStr, valStr] = parts;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dataStr)) continue; // salta intestazione o righe malformate
+    const val = parseFloat(valStr.replace(',', '.'));
+    if (Number.isNaN(val)) continue;
+    punti.push({ data: dataStr, spostamento_cumulato_mm: val });
+  }
+  return punti;
+}
+
+async function submitEgmsImport() {
+  const csv = document.getElementById('egms-csv').value;
+  const punti = parseEgmsCsv(csv);
+  const errorEl = document.getElementById('egms-error');
+  if (punti.length === 0) {
+    errorEl.textContent = 'Nessun punto valido trovato. Formato atteso: una riga per punto, "AAAA-MM-GG,valore_mm".';
+    return;
+  }
+  const authToken = Auth.get()?.token;
+  try {
+    const res = await fetch(`/api/structures/${activeEgmsStructureId}/egms/import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+      body: JSON.stringify({ punti, fonte: 'EGMS Explorer (import manuale)' }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      errorEl.textContent = 'Errore: ' + (body.detail || res.status);
+      return;
+    }
+    const result = await res.json();
+    alert(`Importati ${result.punti_importati} punti (totale ${result.punti_totali} per questa struttura). Il trend viene ricalcolato automaticamente.`);
+    closeEgmsForm();
+    loadStructures();
+  } catch (e) {
+    errorEl.textContent = 'Errore di rete durante l\'importazione. L\'import EGMS richiede una connessione attiva (a differenza delle ispezioni, non è accodato offline: è un caricamento massivo di dati storici, non un evento da registrare sul campo).';
+  }
+}
+
+let activeEditStructureId = null;
+let activeEditBaseUpdatedAt = null;
+
+function openEditForm(structureId, baseUpdatedAt) {
+  activeEditStructureId = structureId;
+  activeEditBaseUpdatedAt = baseUpdatedAt;
+  document.getElementById('edit-modal').style.display = 'flex';
+}
+function closeEditForm() {
+  document.getElementById('edit-modal').style.display = 'none';
+  ['e_tipologia','e_ridondanza','e_zona_sismica','e_traffico','e_edifici_sensibili','e_popolazione','e_ultima_verifica'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('e_normativa').checked = false;
+  document.getElementById('e_percorsi_alt').checked = false;
+}
+async function submitEdit() {
+  const body = {};
+  const tipologia = document.getElementById('e_tipologia').value; if (tipologia) body.tipologia_strutturale = tipologia;
+  const ridondanza = document.getElementById('e_ridondanza').value; if (ridondanza) body.ridondanza = ridondanza;
+  const zona = document.getElementById('e_zona_sismica').value; if (zona) body.zona_sismica = parseInt(zona);
+  const verifica = document.getElementById('e_ultima_verifica').value; if (verifica) body.ultima_verifica_tecnica = verifica;
+  const traffico = document.getElementById('e_traffico').value; if (traffico) body.traffico_giornaliero_stimato = parseInt(traffico);
+  const sensibili = document.getElementById('e_edifici_sensibili').value; if (sensibili) body.edifici_sensibili_vicini = parseInt(sensibili);
+  const popolazione = document.getElementById('e_popolazione').value; if (popolazione) body.popolazione_servita_stimata = parseInt(popolazione);
+  if (document.getElementById('e_normativa').checked) body.normativa_antisismica = true;
+  if (document.getElementById('e_percorsi_alt').checked) body.percorsi_alternativi = true;
+  body.base_updated_at = activeEditBaseUpdatedAt;
+
+  const outcome = await tryOrQueue('update_structure', { structureId: activeEditStructureId, body }, async (p) => {
+    const res = await fetch(`/api/structures/${p.structureId}`, {
+      method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(p.body)
+    });
+    if (!res.ok) throw new HttpError(res, await res.json());
+    return res;
+  }).catch(err => { if (err instanceof HttpError) { alert('Errore: ' + JSON.stringify(err.body.detail)); return { error: true }; } throw err; });
+
+  if (outcome.error) return;
+  closeEditForm();
+  if (outcome.queued) {
+    alert('Nessuna rete: modifica salvata in locale, verrà inviata al server appena la connessione torna disponibile.');
+  }
+  loadStructures();
+}
+
+function vulnerabilitaChips(s) {
+  const chips = [];
+  if (s.tipologia_strutturale) chips.push(`<span class="tag-chip">${s.tipologia_strutturale}</span>`);
+  if (s.ridondanza === 'non_ridondante') chips.push(`<span class="tag-chip warn">⚠ non ridondante</span>`);
+  else if (s.ridondanza) chips.push(`<span class="tag-chip">${s.ridondanza.replace('_',' ')}</span>`);
+  if (s.zona_sismica) chips.push(`<span class="tag-chip">zona sismica ${s.zona_sismica}</span>`);
+  if (s.normativa_antisismica === false) chips.push(`<span class="tag-chip warn">⚠ no normativa antisismica</span>`);
+  if (s.edifici_sensibili_vicini) chips.push(`<span class="tag-chip">${s.edifici_sensibili_vicini} edifici sensibili vicini</span>`);
+  if (s.percorsi_alternativi === false) chips.push(`<span class="tag-chip warn">⚠ nessun percorso alternativo</span>`);
+  return chips.join('');
+}
+
+// Strutture create offline e non ancora sincronizzate: renderizzate con
+// un badge "non sincronizzata" e senza i pulsanti che richiedono un id
+// reale sul server (ispezione, modifica) finché non vengono inviate.
+async function pendingStructureCards() {
+  const items = await OfflineQueue.all();
+  return items
+    .filter(i => i.type === 'create_structure' && i.status !== 'conflict')
+    .map(i => `
+      <div class="card" style="opacity:0.75;">
+        <div class="struct-row">
+          <div>
+            <strong>${i.payload.body.name || '(senza nome)'}</strong> — ${i.payload.body.tipo}
+            <div class="small">In attesa di sincronizzazione</div>
+          </div>
+          <span class="pending-badge">⏳ non sincronizzata</span>
+        </div>
+      </div>
+    `);
+}
+
+async function loadStructures() {
+  const res = await fetch('/api/structures').catch(() => null);
+  const structures = res && res.ok ? await res.json() : [];
+  const container = document.getElementById('structures');
+  const pendingCards = await pendingStructureCards();
+  const serverCards = structures.map(s => `
+    <div class="card">
+      <div class="struct-row">
+        <div>
+          <strong>${s.name}</strong> — ${s.tipo}${s.tipo==='edificio' && s.destinazione_uso ? ' ('+s.destinazione_uso+')' : ''} ${s.comune ? '· ' + s.comune : ''}
+          <div class="small">${s.n_ispezioni} ispezioni registrate ${s.ultima_ispezione ? '· ultima: ' + new Date(s.ultima_ispezione).toLocaleDateString('it-IT') : ''}</div>
+        </div>
+        <span class="badge badge-${s.readiness_colore}">${s.readiness_colore.toUpperCase()}</span>
+      </div>
+      <div class="small">${s.readiness_motivo}</div>
+      <div>${vulnerabilitaChips(s)}</div>
+      <div class="small">${s.trend_deformazione_egms ? 'Deformazione (EGMS): ' + s.trend_deformazione_egms : ''}</div>
+      <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+        <button onclick="openInspectionForm(${s.id})">+ Registra ispezione</button>
+        <button class="secondary" onclick="openEditForm(${s.id}, '${s.updated_at}')">Modifica dati tecnici</button>
+        <button class="secondary" onclick="openEgmsForm(${s.id})">Importa dati EGMS</button>
+      </div>
+    </div>
+  `);
+  const all = [...pendingCards, ...serverCards];
+  container.innerHTML = all.join('') || '<p>Nessuna struttura ancora. Aggiungine una sopra.</p>';
+}
+
+/* --------------------------- Sincronizzazione --------------------------- */
+
+async function syncQueue() {
+  const items = (await OfflineQueue.all()).filter(i => i.status === 'pending');
+  if (!items.length) { updateOfflineBanner(); return; }
+
+  // Prima tutte le create_structure, in ordine: risolvono i tempId di cui
+  // le altre voci potrebbero avere bisogno per essere inviate a loro volta.
+  const ordered = [
+    ...items.filter(i => i.type === 'create_structure'),
+    ...items.filter(i => i.type !== 'create_structure'),
+  ];
+
+  for (const item of ordered) {
+    try {
+      if (item.type === 'create_structure') {
+        const body = { ...item.payload.body, client_uuid: item.clientUuid };
+        const res = await fetch('/api/structures', {
+          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+        });
+        if (!res.ok) { await OfflineQueue.update(item.id, { status: 'error', errorDetail: await res.text() }); continue; }
+        const created = await res.json();
+        tempIdMap[item.payload.tempId] = created.id;
+        await OfflineQueue.remove(item.id);
+
+      } else if (item.type === 'create_inspection') {
+        let structureId = item.payload.structureId;
+        if (typeof structureId === 'string' && structureId.startsWith('tmp-')) {
+          structureId = tempIdMap[structureId];
+          if (structureId === undefined) continue; // la struttura non è ancora sincronizzata, riproveremo al prossimo giro
+        }
+        if (!item.payload.authToken) { await OfflineQueue.update(item.id, { status: 'error', errorDetail: 'Nessun token salvato per questa ispezione — accedi di nuovo e ripeti.' }); continue; }
+        const formData = new FormData();
+        formData.append('gravita', item.payload.gravita);
+        formData.append('note', item.payload.note || '');
+        formData.append('client_uuid', item.clientUuid);
+        if (item.payload.foto) formData.append('foto', item.payload.foto);
+        const res = await fetch(`/api/structures/${structureId}/inspections`, {
+          method: 'POST', headers: { 'Authorization': 'Bearer ' + item.payload.authToken }, body: formData,
+        });
+        if (res.status === 401) { await OfflineQueue.update(item.id, { status: 'error', errorDetail: 'Sessione scaduta al momento della sincronizzazione — accedi di nuovo.' }); continue; }
+        if (!res.ok) { await OfflineQueue.update(item.id, { status: 'error', errorDetail: await res.text() }); continue; }
+        await OfflineQueue.remove(item.id);
+
+      } else if (item.type === 'update_structure') {
+        let structureId = item.payload.structureId;
+        if (typeof structureId === 'string' && structureId.startsWith('tmp-')) {
+          structureId = tempIdMap[structureId];
+          if (structureId === undefined) continue;
+        }
+        const res = await fetch(`/api/structures/${structureId}`, {
+          method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(item.payload.body)
+        });
+        if (res.status === 409) {
+          const conflictBody = await res.json();
+          await OfflineQueue.update(item.id, { status: 'conflict', serverState: conflictBody.detail.struttura_attuale });
+          continue;
+        }
+        if (!res.ok) { await OfflineQueue.update(item.id, { status: 'error', errorDetail: await res.text() }); continue; }
+        await OfflineQueue.remove(item.id);
+      }
+    } catch (err) {
+      if (isNetworkError(err)) break; // rete caduta di nuovo a metà sync: fermati, riproveremo
+      await OfflineQueue.update(item.id, { status: 'error', errorDetail: String(err) });
+    }
+  }
+
+  updateOfflineBanner();
+  loadStructures();
+}
+
+async function updateOfflineBanner() {
+  const banner = document.getElementById('offline-banner');
+  const text = document.getElementById('offline-banner-text');
+  const action = document.getElementById('offline-banner-action');
+  const items = await OfflineQueue.all();
+  const pending = items.filter(i => i.status === 'pending').length;
+  const conflicts = items.filter(i => i.status === 'conflict').length;
+  const errors = items.filter(i => i.status === 'error').length;
+
+  banner.classList.remove('state-offline', 'state-pending', 'state-conflict');
+  action.style.display = 'none';
+
+  if (!navigator.onLine) {
+    banner.classList.add('show', 'state-offline');
+    text.textContent = `📴 Nessuna connessione — le modifiche vengono salvate in locale (${pending} in attesa).`;
+  } else if (conflicts > 0) {
+    banner.classList.add('show', 'state-conflict');
+    text.textContent = `⚠ ${conflicts} modifica/e in conflitto da risolvere.`;
+    action.style.display = 'inline-block';
+  } else if (pending > 0 || errors > 0) {
+    banner.classList.add('show', 'state-pending');
+    text.textContent = `🔄 Sincronizzazione in corso — ${pending} in coda${errors ? `, ${errors} con errore` : ''}.`;
+  } else {
+    banner.classList.remove('show');
+  }
+}
+
+async function openConflictsView() {
+  const items = (await OfflineQueue.all()).filter(i => i.status === 'conflict');
+  const list = document.getElementById('conflicts-list');
+  list.innerHTML = items.map(item => {
+    const mine = item.payload.body;
+    const server = item.serverState;
+    const fields = Object.keys(mine).filter(k => k !== 'base_updated_at');
+    const rows = fields.map(f => `<tr><td>${f}</td><td>${JSON.stringify(mine[f])}</td><td>${JSON.stringify(server ? server[f] : undefined)}</td></tr>`).join('');
+    return `
+      <div class="conflict-diff">
+        <strong>Struttura #${item.payload.structureId} — ${server ? server.name : ''}</strong>
+        <table>
+          <tr><td></td><td><b>La tua modifica</b></td><td><b>Sul server ora</b></td></tr>
+          ${rows}
+        </table>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button onclick="resolveConflict(${item.id}, 'mine')">Applica la mia modifica</button>
+          <button class="secondary" onclick="resolveConflict(${item.id}, 'discard')">Scarta la mia modifica</button>
+        </div>
+      </div>
+    `;
+  }).join('') || '<p class="small">Nessun conflitto al momento.</p>';
+  document.getElementById('conflicts-modal').style.display = 'flex';
+}
+function closeConflictsView() { document.getElementById('conflicts-modal').style.display = 'none'; }
+
+async function resolveConflict(queueId, choice) {
+  const items = await OfflineQueue.all();
+  const item = items.find(i => i.id === queueId);
+  if (!item) return;
+  if (choice === 'discard') {
+    await OfflineQueue.remove(queueId);
+  } else {
+    // "Applica la mia modifica": la re-invio partendo dal base_updated_at
+    // AGGIORNATO (quello che il server ha ora), così supera il controllo
+    // di conflitto — è una decisione esplicita dell'operatore, non un
+    // last-write-wins automatico.
+    item.payload.body.base_updated_at = item.serverState.updated_at;
+    await OfflineQueue.update(queueId, { status: 'pending', payload: item.payload });
+  }
+  openConflictsView();
+  syncQueue();
+}
+
+window.addEventListener('online', () => { updateOfflineBanner(); syncQueue(); });
+window.addEventListener('offline', () => { updateOfflineBanner(); });
+setInterval(() => { if (navigator.onLine) syncQueue(); }, 30000);
+
+loadStructures();
+updateOfflineBanner();
+refreshAuthUI();
+if (navigator.onLine) syncQueue();
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/static/service-worker.js').catch(() => {
+    // Se fallisce (es. non in HTTPS), l'app funziona comunque come sito normale.
+  });
+}
+</script>
+</body>
+</html>
