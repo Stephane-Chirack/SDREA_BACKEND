@@ -1,0 +1,75 @@
+## Blueprint Render — deploy gratuito dei tre servizi SDREA (idraulico, sismico, ponti-daghi-edifici).
+##
+## Come si usa (nessuna riga di comando richiesta):
+## 1. Crea un account gratuito su https://render.com (login con GitHub, non serve carta di credito).
+## 2. Metti questa cartella (sdrea-deploy/) in un repository GitHub (vedi il README nella cartella padre per i passaggi).
+## 3. In Render: "New +" -> "Blueprint" -> scegli il repository -> Render legge questo file
+##    e propone di creare i tre servizi in automatico -> "Apply".
+## 4. Al termine del deploy annota i tre URL pubblici (es. https://sdrea-motore-idraulico.onrender.com)
+##    e comunicali per completare il collegamento con l'interfaccia SDREA.html.
+##
+## Nota onesta: il piano gratuito di Render mette il servizio "in pausa" dopo 15 minuti
+## senza richieste, e la prima richiesta successiva impiega circa un minuto per risvegliarlo.
+## Prima di un colloquio o una demo, apri semplicemente una volta l'URL (o /healthz, dove c'è)
+## di ciascun servizio qualche minuto prima, per "svegliarli" in anticipo.
+##
+## Nota onesta sui dati di ponti-daghi-edifici-rischio: sul piano gratuito il filesystem del
+## servizio NON è persistente tra un deploy e l'altro (non è collegato un disco permanente,
+## opzione a pagamento) — ogni volta che pubblichi un aggiornamento del codice di questo
+## servizio, il database SQLite locale (strutture, ispezioni, ispettori registrati) riparte
+## vuoto. Va bene per sviluppo/demo; prima di accumulare dati reali da conservare, valuta un
+## disco persistente a pagamento o un database esterno.
+##
+## La chiave di autenticazione servizio-a-servizio (SDREA_SERVICE_KEY /
+## PONTI_DAGHI_SERVICE_KEY) viene generata automaticamente da Render e condivisa tra i due
+## servizi: non devi copiarla né inventarla tu.
+
+services:
+  - type: web
+    name: sdrea-motore-idraulico
+    runtime: docker
+    plan: free
+    rootDir: motore-idraulico
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+
+  - type: web
+    name: sdrea-motore-sismico
+    runtime: docker
+    plan: free
+    rootDir: motore-sismico
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      # URL pubblico del servizio ponti-daghi-edifici-rischio — valore atteso di default
+      # (nome del servizio + ".onrender.com"); se Render te ne assegna uno diverso
+      # (es. per un conflitto di nome), aggiorna questa variabile dal pannello Render.
+      - key: PONTI_DAGHI_BASE_URL
+        value: https://sdrea-ponti-daghi-edifici-rischio.onrender.com
+      # Chiave condivisa per il canale protetto con ponti-daghi-edifici-rischio —
+      # generata automaticamente da Render, letta direttamente dall'altro servizio.
+      - key: PONTI_DAGHI_SERVICE_KEY
+        fromService:
+          name: sdrea-ponti-daghi-edifici-rischio
+          type: web
+          envVarKey: SDREA_SERVICE_KEY
+
+  - type: web
+    name: sdrea-ponti-daghi-edifici-rischio
+    runtime: docker
+    plan: free
+    rootDir: ponti-daghi-edifici-rischio
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      # Chiave condivisa per il canale protetto con sdrea-motore-sismico — generata
+      # automaticamente da Render al primo deploy, non va impostata a mano.
+      - key: SDREA_SERVICE_KEY
+        generateValue: true
