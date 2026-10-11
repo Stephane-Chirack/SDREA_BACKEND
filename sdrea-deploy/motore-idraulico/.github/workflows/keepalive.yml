@@ -1,1 +1,27 @@
+name: Mantieni svegli i motori SDREA
 
+# Si attiva da solo ogni 10 minuti, 24 ore su 24, e "suona il campanello"
+# a tutti e tre i backend SDREA cosi' il piano gratuito Render non li
+# rimette mai a dormire. Nessun account esterno, nessuna password: usa
+# solo GitHub, dove sei gia' dentro.
+#
+# Puoi anche farlo partire a mano in qualsiasi momento (utile per
+# risvegliare tutto subito prima del colloquio): vai sulla scheda
+# "Actions" di questo repository, scegli "Mantieni svegli i motori SDREA"
+# dall'elenco a sinistra, poi clicca "Run workflow".
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Motore sismico
+        run: curl --max-time 60 -s -o /dev/null -w "sismico: HTTP %{http_code}\n" https://sdrea-motore-sismico.onrender.com || true
+      - name: Motore idraulico
+        run: curl --max-time 60 -s -o /dev/null -w "idraulico: HTTP %{http_code}\n" https://sdrea-motore-idraulico.onrender.com || true
+      - name: Motore ponti, daghi ed edifici a rischio
+        run: curl --max-time 60 -s -o /dev/null -w "ponti-daghi: HTTP %{http_code}\n" https://sdrea-ponti-daghi-edifici-rischio.onrender.com || true
