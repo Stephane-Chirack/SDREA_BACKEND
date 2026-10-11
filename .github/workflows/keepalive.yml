@@ -10,8 +10,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Motore sismico
-        run: curl --max-time 60 -s -o /dev/null -w "sismico: HTTP %{http_code}\n" https://sdrea-motore-sismico.onrender.com || true
+        run: |
+          curl --max-time 60 -s -o /dev/null -w "sismico HTTP %{http_code}\n" https://sdrea-motore-sismico.onrender.com || true
       - name: Motore idraulico
-        run: curl --max-time 60 -s -o /dev/null -w "idraulico: HTTP %{http_code}\n" https://sdrea-motore-idraulico.onrender.com || true
+        run: |
+          curl --max-time 60 -s -o /dev/null -w "idraulico HTTP %{http_code}\n" https://sdrea-motore-idraulico.onrender.com || true
       - name: Motore ponti, daghi ed edifici a rischio
-        run: curl --max-time 60 -s -o /dev/null -w "ponti-daghi: HTTP %{http_code}\n" https://sdrea-ponti-daghi-edifici-rischio.onrender.com || true
+        run: |
+          curl --max-time 60 -s -o /dev/null -w "ponti-daghi HTTP %{http_code}\n" https://sdrea-ponti-daghi-edifici-rischio.onrender.com || true
